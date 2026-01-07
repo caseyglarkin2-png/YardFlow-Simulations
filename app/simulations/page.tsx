@@ -1,4 +1,10 @@
 import { DriverCheckInOutSim, FacilityOpsSim, NetworkEffectSim } from '@/components/simulations';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'YardFlow Simulations - Interactive Demos',
+  description: 'See the before/after difference across driver experience, facility operations, and network effects.',
+};
 
 export default function SimulationsPage() {
   return (
