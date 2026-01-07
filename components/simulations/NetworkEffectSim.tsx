@@ -1,334 +1,280 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { SimulationShell, SimMode, SimStep, GlassPanel } from './SimulationShell';
-import { Network, TrendingUp, DollarSign, Timer, BadgeCheck } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
-function makeNodes(n: number) {
-  // deterministic-ish layout in a ring + inner cluster
-  const nodes: Array<{ id: string; x: number; y: number }> = [];
-  const center = { x: 360, y: 210 };
-  const ring = Math.min(n, 14);
-  const inner = Math.max(0, n - ring);
-
-  for (let i = 0; i < ring; i++) {
-    const a = (Math.PI * 2 * i) / ring;
-    nodes.push({
-      id: `R${i}`,
-      x: center.x + Math.cos(a) * 160,
-      y: center.y + Math.sin(a) * 110,
-    });
-  }
-
-  for (let i = 0; i < inner; i++) {
-    const a = (Math.PI * 2 * i) / Math.max(1, inner);
-    nodes.push({
-      id: `I${i}`,
-      x: center.x + Math.cos(a) * 70,
-      y: center.y + Math.sin(a) * 45,
-    });
-  }
-
-  return nodes.slice(0, n);
-}
-
-function NetworkScene({
+// Network visualization showing interconnected facilities
+function NetworkMap({
   facilities,
   mode,
 }: {
   facilities: number;
-  mode: SimMode;
+  mode: 'before' | 'after';
 }) {
-  const nodes = useMemo(() => makeNodes(facilities), [facilities]);
-
-  // edges: connect each node to center-ish + a neighbor for "mesh"
-  const edges = useMemo(() => {
-    const e: Array<{ a: number; b: number }> = [];
-    if (nodes.length < 2) return e;
-    for (let i = 0; i < nodes.length; i++) {
-      e.push({ a: i, b: (i + 1) % nodes.length });
-      e.push({ a: i, b: Math.floor((i * 7) % nodes.length) });
+  const nodes = useMemo(() => {
+    const result: Array<{ id: string; x: number; y: number; size: number }> = [];
+    const cols = Math.ceil(Math.sqrt(facilities));
+    const rows = Math.ceil(facilities / cols);
+    
+    for (let i = 0; i < facilities; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const spacing = 120;
+      const offsetX = 100 + (5 - cols) * 30;
+      const offsetY = 80 + (4 - rows) * 20;
+      
+      result.push({
+        id: `node-${i}`,
+        x: offsetX + col * spacing,
+        y: offsetY + row * spacing,
+        size: 40 + Math.random() * 20,
+      });
     }
-    return e.slice(0, Math.min(90, e.length));
+    return result;
+  }, [facilities]);
+
+  const connections = useMemo(() => {
+    const result: Array<{ from: number; to: number }> = [];
+    for (let i = 0; i < nodes.length; i++) {
+      // Connect to next node
+      if (i < nodes.length - 1) result.push({ from: i, to: i + 1 });
+      // Connect to node 2 steps ahead for mesh effect
+      if (i < nodes.length - 2) result.push({ from: i, to: i + 2 });
+    }
+    return result;
   }, [nodes]);
 
-  const pulseOpacity = mode === 'after' ? 0.25 : 0.08;
-
   return (
-    <div className="relative">
-      <svg viewBox="0 0 720 420" className="w-full h-[420px]">
-        <g opacity="0.15">
-          {Array.from({ length: 22 }).map((_, i) => (
-            <line key={i} x1={0} y1={i * 20} x2={720} y2={i * 20} stroke="rgba(255,255,255,0.08)" />
-          ))}
-          {Array.from({ length: 36 }).map((_, i) => (
-            <line key={i} x1={i * 20} y1={0} x2={i * 20} y2={420} stroke="rgba(255,255,255,0.06)" />
-          ))}
-        </g>
+    <svg viewBox="0 0 700 500" className="h-full w-full">
+      {/* Grid background */}
+      <defs>
+        <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.5" fill="rgba(255,255,255,0.1)" />
+        </pattern>
+        <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="rgba(6,182,212,0.4)" />
+          <stop offset="100%" stopColor="rgba(6,182,212,0)" />
+        </radialGradient>
+      </defs>
+      
+      <rect width="700" height="500" fill="url(#grid)" opacity="0.3" />
 
-        {/* edges */}
-        <g>
-          {edges.map((ed, idx) => {
-            const A = nodes[ed.a];
-            const B = nodes[ed.b];
-            return (
-              <line
-                key={idx}
-                x1={A.x}
-                y1={A.y}
-                x2={B.x}
-                y2={B.y}
-                stroke={mode === 'after' ? 'rgba(56,189,248,0.20)' : 'rgba(255,255,255,0.10)'}
-                strokeWidth="1"
-              />
-            );
-          })}
-        </g>
+      {/* Connection lines */}
+      <g opacity={mode === 'after' ? 0.6 : 0.2}>
+        {connections.map((conn, idx) => {
+          const from = nodes[conn.from];
+          const to = nodes[conn.to];
+          return (
+            <motion.line
+              key={`conn-${idx}`}
+              x1={from.x}
+              y1={from.y}
+              x2={to.x}
+              y2={to.y}
+              stroke="rgba(6,182,212,0.5)"
+              strokeWidth={mode === 'after' ? 2 : 1}
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 1.5, delay: idx * 0.05 }}
+            />
+          );
+        })}
+      </g>
 
-        {/* nodes */}
-        <g>
-          {nodes.map((n, idx) => (
-            <g key={n.id}>
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={10}
-                fill={mode === 'after' ? 'rgba(56,189,248,0.45)' : 'rgba(255,255,255,0.25)'}
-                stroke={mode === 'after' ? 'rgba(56,189,248,0.45)' : 'rgba(255,255,255,0.15)'}
-              />
-              {/* subtle pulse */}
-              {mode === 'after' ? (
-                <motion.circle
-                  cx={n.x}
-                  cy={n.y}
-                  r={18}
-                  fill="rgba(56,189,248,0.10)"
-                  animate={{ opacity: [0.03, pulseOpacity, 0.03], scale: [0.98, 1.04, 0.98] }}
-                  transition={{ duration: 2.4 + (idx % 5) * 0.2, repeat: Infinity }}
-                />
-              ) : null}
-            </g>
-          ))}
+      {/* Facility nodes */}
+      {nodes.map((node, idx) => (
+        <g key={node.id}>
+          {mode === 'after' && (
+            <motion.circle
+              cx={node.x}
+              cy={node.y}
+              r={node.size / 2 + 10}
+              fill="url(#nodeGlow)"
+              animate={{ 
+                scale: [1, 1.2, 1],
+                opacity: [0.3, 0.6, 0.3]
+              }}
+              transition={{ 
+                duration: 2 + (idx % 3) * 0.5,
+                repeat: Infinity,
+                delay: idx * 0.1
+              }}
+            />
+          )}
+          
+          <motion.rect
+            x={node.x - node.size / 2}
+            y={node.y - node.size / 2}
+            width={node.size}
+            height={node.size}
+            rx="6"
+            fill="rgba(255,255,255,0.03)"
+            stroke={mode === 'after' ? 'rgba(6,182,212,0.6)' : 'rgba(255,255,255,0.2)'}
+            strokeWidth="2"
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: idx * 0.08, type: 'spring', stiffness: 200 }}
+          />
+          
+          {/* Mini building icon */}
+          <rect
+            x={node.x - 8}
+            y={node.y - 8}
+            width="16"
+            height="16"
+            rx="2"
+            fill={mode === 'after' ? 'rgba(6,182,212,0.3)' : 'rgba(255,255,255,0.2)'}
+          />
         </g>
-      </svg>
+      ))}
 
-      <div className="absolute left-4 top-4">
-        <GlassPanel className="p-3 w-[320px]">
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-semibold uppercase tracking-wider text-white/60">
-              Network Live
-            </div>
-            <div className="text-sm font-semibold text-white">{facilities} facilities</div>
-          </div>
-          <div className="mt-2 text-xs text-white/70">
-            Each node adds standardized events → better predictions → less buffer → more turns.
-          </div>
-        </GlassPanel>
-      </div>
-    </div>
+      {/* Data flow particles in "after" mode */}
+      {mode === 'after' && connections.slice(0, 5).map((conn, idx) => {
+        const from = nodes[conn.from];
+        const to = nodes[conn.to];
+        return (
+          <motion.circle
+            key={`particle-${idx}`}
+            r="3"
+            fill="rgba(6,182,212,0.9)"
+            animate={{
+              cx: [from.x, to.x, from.x],
+              cy: [from.y, to.y, from.y],
+            }}
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              delay: idx * 0.6,
+              ease: 'linear'
+            }}
+          />
+        );
+      })}
+    </svg>
   );
 }
 
 export default function NetworkEffectSim() {
-  const steps: SimStep[] = [
-    {
-      id: 'silos',
-      title: 'Silos',
-      narration:
-        'Before: each yard is a standalone planet with its own rules. Network-level performance is basically folklore.',
-      metrics: {
-        before: [
-          { key: 'eta', label: 'ETA Accuracy', value: 'Low', emphasis: 'bad' },
-          { key: 'dwell', label: 'Network Dwell', value: 'High', emphasis: 'bad' },
-          { key: 'turn', label: 'Turns', value: 'Flat', emphasis: 'bad' },
-          { key: 'cash', label: 'Cash Released', value: '$0', emphasis: 'bad' },
-        ],
-        after: [
-          { key: 'eta', label: 'ETA Accuracy', value: 'Improving', emphasis: 'good' },
-          { key: 'dwell', label: 'Network Dwell', value: 'Down', emphasis: 'good' },
-          { key: 'turn', label: 'Turns', value: 'Up', emphasis: 'good' },
-          { key: 'cash', label: 'Cash Released', value: 'Ramping', emphasis: 'good' },
-        ],
-      },
-    },
-    {
-      id: 'standard',
-      title: 'Standardized Events',
-      narration:
-        'After: check-in/out, equipment, seals, door events become standardized signals — comparable across the whole network.',
-      metrics: {
-        before: [
-          { key: 'data', label: 'Event Data', value: 'Sparse', emphasis: 'bad' },
-          { key: 'ops', label: 'Ops Variance', value: 'High', emphasis: 'bad' },
-          { key: 'buf', label: 'Buffers', value: 'Large', emphasis: 'bad' },
-          { key: 'risk', label: 'Risk', value: 'Opaque', emphasis: 'bad' },
-        ],
-        after: [
-          { key: 'data', label: 'Event Data', value: 'Rich', emphasis: 'good' },
-          { key: 'ops', label: 'Ops Variance', value: 'Lower', emphasis: 'good' },
-          { key: 'buf', label: 'Buffers', value: 'Smaller', emphasis: 'good' },
-          { key: 'risk', label: 'Risk', value: 'Visible', emphasis: 'good' },
-        ],
-      },
-    },
-    {
-      id: 'compounding',
-      title: 'Compounding',
-      narration:
-        'More facilities live → more comparable events → stronger predictions → less detention and better utilization.',
-      metrics: {
-        before: [
-          { key: 'roi', label: 'ROI', value: 'Local only', emphasis: 'bad' },
-          { key: 'sla', label: 'Service', value: 'Variable', emphasis: 'bad' },
-          { key: 'inv', label: 'Inventory', value: 'High', emphasis: 'bad' },
-          { key: 'wc', label: 'Working Cap', value: 'Tied up', emphasis: 'bad' },
-        ],
-        after: [
-          { key: 'roi', label: 'ROI', value: 'Network', emphasis: 'good' },
-          { key: 'sla', label: 'Service', value: 'More stable', emphasis: 'good' },
-          { key: 'inv', label: 'Inventory', value: 'Reduced', emphasis: 'good' },
-          { key: 'wc', label: 'Working Cap', value: 'Freed', emphasis: 'good' },
-        ],
-      },
-    },
-    {
-      id: 'boardroom',
-      title: 'Boardroom View',
-      narration:
-        'This is the pitch: a network-level operating system. Not "a yard tool." A compounding advantage.',
-      callouts: [{ title: 'CEO line', body: 'Every facility added makes every other facility smarter.' }],
-      metrics: {
-        before: [
-          { key: 'story', label: 'Story', value: 'Cost center', emphasis: 'bad' },
-          { key: 'predict', label: 'Predictability', value: 'Low', emphasis: 'bad' },
-          { key: 'det', label: 'Detention', value: 'Up', emphasis: 'bad' },
-          { key: 'brand', label: 'Carrier CX', value: 'Mixed', emphasis: 'bad' },
-        ],
-        after: [
-          { key: 'story', label: 'Story', value: 'Advantage', emphasis: 'good' },
-          { key: 'predict', label: 'Predictability', value: 'High', emphasis: 'good' },
-          { key: 'det', label: 'Detention', value: 'Down', emphasis: 'good' },
-          { key: 'brand', label: 'Carrier CX', value: 'Strong', emphasis: 'good' },
-        ],
-      },
-    },
-  ];
+  const [mode, setMode] = useState<'before' | 'after'>('before');
+  const [facilities, setFacilities] = useState(9);
 
-  const [mode, setMode] = useState<SimMode>('before');
-  const [stepIndex, setStepIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [facilities, setFacilities] = useState(12);
-
-  // derived "executive KPIs" based on facility count + mode
-  const execKPIs = useMemo(() => {
-    const n = facilities;
-    const t = Math.min(1, n / 30);
-    const eta = mode === 'after' ? Math.round(lerp(55, 88, t)) : Math.round(lerp(40, 55, t));
-    const dwell = mode === 'after' ? Math.round(lerp(180, 120, t)) : Math.round(lerp(210, 195, t));
-    const cash = mode === 'after' ? Math.round(lerp(0.5, 6.0, t) * 10) / 10 : 0;
-    const turns = mode === 'after' ? Math.round(lerp(1.0, 1.35, t) * 100) / 100 : Math.round(lerp(1.0, 1.05, t) * 100) / 100;
-    return { eta, dwell, cash, turns };
+  const metrics = useMemo(() => {
+    const scale = facilities / 30;
+    if (mode === 'after') {
+      return {
+        accuracy: Math.round(55 + scale * 33) + '%',
+        dwell: Math.round(180 - scale * 60) + 'm',
+        turns: (1 + scale * 0.35).toFixed(2) + 'x',
+        cash: '$' + (scale * 8).toFixed(1) + 'M',
+      };
+    }
+    return {
+      accuracy: Math.round(40 + scale * 15) + '%',
+      dwell: Math.round(210 - scale * 15) + 'm',
+      turns: (1 + scale * 0.05).toFixed(2) + 'x',
+      cash: '$0M',
+    };
   }, [facilities, mode]);
 
-  useEffect(() => {
-    if (!isPlaying) return;
-    const t = setInterval(() => setStepIndex((i) => (i + 1) % steps.length), 2600);
-    return () => clearInterval(t);
-  }, [isPlaying, steps.length]);
-
   return (
-    <SimulationShell
-      title="Network Effect (C-suite View)"
-      description="A compounding simulation: standardized events across facilities create measurable network advantage."
-      steps={steps}
-      stepIndex={stepIndex}
-      setStepIndex={setStepIndex}
-      mode={mode}
-      setMode={setMode}
-      isPlaying={isPlaying}
-      setIsPlaying={setIsPlaying}
-      onReset={() => {
-        setIsPlaying(false);
-        setStepIndex(0);
-        setMode('before');
-        setFacilities(12);
-      }}
-      leftVisual={<NetworkScene facilities={facilities} mode={mode} />}
-      rightVisual={
-        <div className="space-y-3">
-          <div className="text-xs font-semibold uppercase tracking-wider text-white/60">Controls</div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-            <div className="flex items-center justify-between text-white/85">
-              <div className="flex items-center gap-2">
-                <Network className="h-4 w-4" />
-                <div className="text-sm font-semibold">Facilities Live</div>
-              </div>
-              <div className="text-xs text-white/70">{facilities}/30</div>
-            </div>
-            <input
-              className="mt-2 w-full accent-white"
-              type="range"
-              min={1}
-              max={30}
-              value={facilities}
-              onChange={(e) => setFacilities(parseInt(e.target.value, 10))}
-            />
-            <div className="mt-1 text-xs text-white/65">
-              Slide right to make the CFO start smiling against their will.
-            </div>
-          </div>
+    <div className="w-full">
+      {/* Header */}
+      <div className="mb-8 text-center">
+        <h2 className="text-3xl font-bold text-white">Network Effect</h2>
+        <p className="mt-2 text-lg text-white/60">
+          Every facility added makes the entire network smarter
+        </p>
+      </div>
 
-          <GlassPanel className="p-3">
-            <div className="text-xs font-semibold uppercase tracking-wider text-white/60">
-              Executive KPIs (illustrative)
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                <div className="flex items-center gap-2 text-white/85">
-                  <TrendingUp className="h-4 w-4" />
-                  <div className="text-sm font-semibold">ETA Accuracy</div>
-                </div>
-                <div className="mt-1 text-lg font-semibold text-white">{execKPIs.eta}%</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                <div className="flex items-center gap-2 text-white/85">
-                  <Timer className="h-4 w-4" />
-                  <div className="text-sm font-semibold">Avg Dwell</div>
-                </div>
-                <div className="mt-1 text-lg font-semibold text-white">{execKPIs.dwell}m</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                <div className="flex items-center gap-2 text-white/85">
-                  <DollarSign className="h-4 w-4" />
-                  <div className="text-sm font-semibold">Cash Released</div>
-                </div>
-                <div className="mt-1 text-lg font-semibold text-white">${execKPIs.cash}M</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                <div className="flex items-center gap-2 text-white/85">
-                  <BadgeCheck className="h-4 w-4" />
-                  <div className="text-sm font-semibold">Turns Index</div>
-                </div>
-                <div className="mt-1 text-lg font-semibold text-white">{execKPIs.turns}×</div>
-              </div>
-            </div>
-          </GlassPanel>
-
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-            <div className="text-sm font-semibold text-white/90">Boardroom takeaway</div>
-            <div className="mt-1 text-sm text-white/75">
-              YardFlow is an operating system for standardized yard events. That standardization is what creates the
-              network effect—and why this becomes a strategic advantage, not a line-item tool.
-            </div>
+      {/* Main visual */}
+      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-gray-900/50 to-gray-950/50 backdrop-blur-sm">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(6,182,212,0.08),transparent_50%)]" />
+        
+        <div className="relative p-8">
+          <div className="h-[500px]">
+            <NetworkMap facilities={facilities} mode={mode} />
           </div>
         </div>
-      }
-    />
-  );
-}
 
-// local helper
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t;
+        {/* Floating stats */}
+        <div className="absolute right-6 top-6 space-y-3">
+          {[
+            { label: 'ETA Accuracy', value: metrics.accuracy },
+            { label: 'Avg Dwell', value: metrics.dwell },
+            { label: 'Turn Index', value: metrics.turns },
+            { label: 'Cash Released', value: metrics.cash },
+          ].map((stat) => (
+            <motion.div
+              key={stat.label}
+              className="rounded-xl border border-white/10 bg-gray-900/80 px-4 py-3 backdrop-blur-xl"
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+            >
+              <div className="text-xs font-medium text-white/50">{stat.label}</div>
+              <div className="text-xl font-bold text-cyan-400">{stat.value}</div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="mt-6 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+        <div className="flex-1">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-medium text-white/70">Facilities in Network</span>
+            <span className="text-lg font-bold text-white">{facilities}</span>
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={30}
+            value={facilities}
+            onChange={(e) => setFacilities(parseInt(e.target.value))}
+            className="h-2 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-cyan-400"
+          />
+          <div className="mt-2 flex justify-between text-xs text-white/40">
+            <span>1 facility</span>
+            <span>30 facilities</span>
+          </div>
+        </div>
+
+        <div className="ml-8 flex items-center gap-3">
+          <button
+            onClick={() => setMode('before')}
+            className={`rounded-xl px-6 py-3 text-sm font-semibold transition-all ${
+              mode === 'before'
+                ? 'bg-white/10 text-white shadow-lg'
+                : 'bg-transparent text-white/50 hover:text-white/70'
+            }`}
+          >
+            Before YardFlow
+          </button>
+          
+          <ArrowRight className="h-5 w-5 text-white/30" />
+          
+          <button
+            onClick={() => setMode('after')}
+            className={`rounded-xl px-6 py-3 text-sm font-semibold transition-all ${
+              mode === 'after'
+                ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/25'
+                : 'bg-transparent text-white/50 hover:text-white/70'
+            }`}
+          >
+            After YardFlow
+          </button>
+        </div>
+      </div>
+
+      {/* Insight */}
+      <div className="mt-6 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-6">
+        <h3 className="text-lg font-semibold text-white">The Compounding Advantage</h3>
+        <p className="mt-2 leading-relaxed text-white/70">
+          {mode === 'before' 
+            ? 'Each yard operates as an island. No shared intelligence. No predictive power. Buffers everywhere.'
+            : 'Standardized events across facilities create a learning network. Better predictions → fewer buffers → more turns → cash released.'}
+        </p>
+      </div>
+    </div>
+  );
 }
