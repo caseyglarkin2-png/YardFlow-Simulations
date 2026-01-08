@@ -33,6 +33,49 @@ function ShellInner({
   const { state, dispatch } = useSim();
   const scenario = state.scenario;
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      // Ignore if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      switch (e.key.toLowerCase()) {
+        case ' ':
+        case 'k':
+          e.preventDefault();
+          dispatch({ type: 'TOGGLE_PLAY' });
+          break;
+        case 'arrowleft':
+          e.preventDefault();
+          dispatch({ type: 'SET_TIME', timeSec: Math.max(0, state.timeSec - 5) });
+          break;
+        case 'arrowright':
+          e.preventDefault();
+          dispatch({ type: 'SET_TIME', timeSec: Math.min(scenario.durationSec, state.timeSec + 5) });
+          break;
+        case 'r':
+          e.preventDefault();
+          dispatch({ type: 'RESTART' });
+          break;
+        case '1':
+          dispatch({ type: 'SET_SPEED', speed: 0.5 });
+          break;
+        case '2':
+          dispatch({ type: 'SET_SPEED', speed: 1 });
+          break;
+        case '3':
+          dispatch({ type: 'SET_SPEED', speed: 1.5 });
+          break;
+        case '4':
+          dispatch({ type: 'SET_SPEED', speed: 2 });
+          break;
+      }
+    }
+
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [dispatch, state.timeSec, scenario.durationSec]);
+
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
       <div className="md:col-span-3">
@@ -98,6 +141,7 @@ export default function SimulationShell({
   const [tab, setTab] = useState<SimTab>(initialTab);
   const [mode, setMode] = useState<SimMode>(initialMode);
   const [facilitiesN, setFacilitiesN] = useState<number>(12);
+  const [copied, setCopied] = useState(false);
 
   const scenario = useMemo(() => getScenario(tab, mode), [tab, mode]);
 
@@ -113,7 +157,10 @@ export default function SimulationShell({
 
   function shareLink() {
     const url = window.location.href;
-    navigator.clipboard?.writeText(url);
+    navigator.clipboard?.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   }
 
   function exportScenario() {
@@ -144,9 +191,14 @@ export default function SimulationShell({
             className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
           >
             <Share2 size={16} />
-            Copy share link
+            {copied ? "Copied!" : "Copy share link"}
           </button>
         </div>
+      </div>
+
+      {/* Keyboard shortcuts hint */}
+      <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-400">
+        <span className="font-semibold text-slate-300">Keyboard:</span> Space/K = play/pause • ←/→ = skip 5s • R = restart • 1-4 = speed
       </div>
 
       {/* tabs + mode toggle */}

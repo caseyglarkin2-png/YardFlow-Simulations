@@ -211,8 +211,8 @@ export default function YardScene({
           GATE
         </text>
 
-        {/* route hint (after mode) */}
-        {after && route.length >= 2 && !reduce && (
+        {/* route hint (after mode) - respect reduced motion */}
+        {after && route.length >= 2 && (
           <motion.path
             d={route
               .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
@@ -222,9 +222,9 @@ export default function YardScene({
             strokeWidth={6}
             strokeLinecap="round"
             strokeLinejoin="round"
-            initial={{ pathLength: 0 }}
+            initial={{ pathLength: reduce ? 1 : 0 }}
             animate={{ pathLength: 1 }}
-            transition={{ duration: 1.2, ease: "easeInOut" }}
+            transition={{ duration: reduce ? 0 : 1.2, ease: "easeInOut" }}
           />
         )}
 
