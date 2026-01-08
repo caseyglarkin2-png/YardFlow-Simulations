@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'YardFlow Simulations',
-  description: 'Interactive before/after simulations showing how YardFlow transforms yard operations',
+  title: 'YardFlow Simulations v2',
+  description: 'Deterministic before/after simulations for YardFlow YNS',
 };
 
 export default function RootLayout({
@@ -13,7 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="min-h-screen bg-[#0b1220] text-slate-100 antialiased">{children}</body>
     </html>
   );
 }

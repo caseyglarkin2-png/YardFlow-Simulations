@@ -1,184 +1,135 @@
-import { SimEvent, MetricDefinition } from './types';
+import type { Scenario, SimEvent } from "./simTypes";
 
-// Metric computation functions
-export const driverMetrics: MetricDefinition[] = [
-  {
-    id: 'gate_time',
-    label: 'Gate Time',
-    unit: 'min',
-    compute: (events: SimEvent[]) => {
-      const queueStart = events.find(e => e.type === 'queue_start');
-      const assigned = events.find(e => e.type === 'assigned_lane' || e.type === 'assigned_door');
-      if (!queueStart || !assigned) return 0;
-      return Math.round((assigned.t - queueStart.t) / 60);
-    },
-    format: (val) => `${val}m`,
-  },
-  {
-    id: 'total_dwell',
-    label: 'Total Dwell',
-    unit: 'min',
-    compute: (events: SimEvent[]) => {
-      const arrive = events.find(e => e.type === 'arrive');
-      const exit = events.find(e => e.type === 'exit_road');
-      if (!arrive || !exit) return 0;
-      return Math.round((exit.t - arrive.t) / 60);
-    },
-    format: (val) => `${val}m`,
-  },
-  {
-    id: 'touchpoints',
-    label: 'Driver Touchpoints',
-    unit: 'count',
-    compute: (events: SimEvent[]) => {
-      const touchpointEvents = ['paperwork_start', 'call_dispatch', 'reroute_manual', 'checkout_paperwork', 'qr_scan'];
-      return events.filter(e => touchpointEvents.includes(e.type)).length;
-    },
-    format: (val) => `${val}`,
-  },
-  {
-    id: 'detention_risk',
-    label: 'Detention Risk',
-    unit: 'boolean',
-    compute: (events: SimEvent[]) => {
-      const arrive = events.find(e => e.type === 'arrive');
-      const exit = events.find(e => e.type === 'exit_road');
-      if (!arrive || !exit) return 'Low';
-      const dwellMin = (exit.t - arrive.t) / 60;
-      return dwellMin > 180 ? 'High' : 'Low';
-    },
-  },
-];
+function firstByType(log: SimEvent[], type: SimEvent["type"], actorId?: string) {
+  return log.find((e) => e.type === type && (actorId ? e.actorId === actorId : true));
+}
 
-export const facilityMetrics: MetricDefinition[] = [
-  {
-    id: 'queue_length',
-    label: 'Queue Length',
-    unit: 'trucks',
-    compute: (events: SimEvent[], currentTime: number) => {
-      const queued = events.filter(e => e.type === 'queue_start' && e.t <= currentTime);
-      const dequeued = events.filter(e => e.type === 'assigned_door' && e.t <= currentTime);
-      return Math.max(0, queued.length - dequeued.length);
-    },
-    format: (val) => `${val}`,
-  },
-  {
-    id: 'door_utilization',
-    label: 'Door Utilization',
-    unit: '%',
-    compute: (events: SimEvent[], currentTime: number) => {
-      const doorEvents = events.filter(e => e.t <= currentTime && (e.type === 'door_occupied' || e.type === 'door_idle'));
-      const occupied = doorEvents.filter(e => e.type === 'door_occupied').length;
-      const total = doorEvents.length;
-      return total > 0 ? Math.round((occupied / total) * 100) : 0;
-    },
-    format: (val) => `${val}%`,
-  },
-  {
-    id: 'moves_per_hour',
-    label: 'Moves/Hour',
-    unit: 'moves/hr',
-    compute: (events: SimEvent[], currentTime: number) => {
-      const moves = events.filter(e => e.type === 'move_end' && e.t <= currentTime).length;
-      const hours = currentTime / 3600;
-      return hours > 0 ? Math.round(moves / hours) : 0;
-    },
-    format: (val) => `${val}`,
-  },
-  {
-    id: 'exceptions',
-    label: 'Exceptions',
-    unit: 'count',
-    compute: (events: SimEvent[], currentTime: number) => {
-      return events.filter(e => e.type === 'exception_detected' && e.t <= currentTime).length;
-    },
-    format: (val) => `${val}`,
-  },
-  {
-    id: 'avg_dwell',
-    label: 'Avg Dwell',
-    unit: 'min',
-    compute: (events: SimEvent[], currentTime: number) => {
-      const completed = events.filter(e => e.type === 'exit_road' && e.t <= currentTime);
-      if (completed.length === 0) return 0;
-      
-      const dwells = completed.map(exit => {
-        const arrive = events.find(e => e.type === 'arrive' && e.actorId === exit.actorId && e.t < exit.t);
-        return arrive ? (exit.t - arrive.t) / 60 : 0;
-      });
-      
-      return Math.round(dwells.reduce((sum, d) => sum + d, 0) / dwells.length);
-    },
-    format: (val) => `${val}m`,
-  },
-];
+export function countTouchpoints(log: SimEvent[], actorId?: string) {
+  return log.filter((e) => (actorId ? e.actorId === actorId : true)).filter((e) => e.touchpoint).length;
+}
 
-export const networkMetrics: MetricDefinition[] = [
-  {
-    id: 'eta_accuracy',
-    label: 'ETA Accuracy',
-    unit: '%',
-    compute: (events: SimEvent[], currentTime: number, facilityCount: number = 1) => {
-      // ETA accuracy improves logarithmically with network size
-      const baseAccuracy = 45;
-      const maxAccuracy = 92;
-      const improvement = (maxAccuracy - baseAccuracy) * Math.log(facilityCount + 1) / Math.log(31);
-      return Math.round(baseAccuracy + improvement);
-    },
-    format: (val) => `${val}%`,
-  },
-  {
-    id: 'avg_dwell',
-    label: 'Avg Dwell',
-    unit: 'min',
-    compute: (events: SimEvent[], currentTime: number, facilityCount: number = 1) => {
-      // Dwell time decreases with network effects
-      const baseDwell = 165;
-      const minDwell = 85;
-      const reduction = (baseDwell - minDwell) * Math.log(facilityCount + 1) / Math.log(31);
-      return Math.round(baseDwell - reduction);
-    },
-    format: (val) => `${val}m`,
-  },
-  {
-    id: 'turn_index',
-    label: 'Turn Index',
-    unit: 'x',
-    compute: (events: SimEvent[], currentTime: number, facilityCount: number = 1) => {
-      // Turn index improves with standardization
-      const baseIndex = 0.78;
-      const maxIndex = 1.25;
-      const improvement = (maxIndex - baseIndex) * Math.log(facilityCount + 1) / Math.log(31);
-      return (baseIndex + improvement).toFixed(2);
-    },
-    format: (val) => `${val}x`,
-  },
-  {
-    id: 'cash_released',
-    label: 'Cash Released',
-    unit: '$M',
-    compute: (events: SimEvent[], currentTime: number, facilityCount: number = 1) => {
-      // Cash released grows with network efficiency
-      const perFacilityBase = 0.8;
-      const networkMultiplier = 1 + Math.log(facilityCount + 1) / Math.log(31) * 0.4;
-      return (facilityCount * perFacilityBase * networkMultiplier).toFixed(1);
-    },
-    format: (val) => `$${val}M`,
-  },
-];
+export function driverMetrics(scenario: Scenario, timeSec: number, log: SimEvent[]) {
+  const actorId = scenario.actors.find((a) => a.kind === "truck")?.id;
 
-export function computeMetrics(
-  metricDefs: MetricDefinition[],
-  events: SimEvent[],
-  currentTime: number,
-  extraParams?: any
-): Record<string, number | string> {
-  const results: Record<string, number | string> = {};
-  
-  metricDefs.forEach(def => {
-    const value = def.compute(events, currentTime, extraParams);
-    results[def.id] = value;
-  });
-  
-  return results;
+  const arrive = firstByType(log, "arrive", actorId);
+  const assigned = firstByType(log, "assigned_door", actorId) ?? firstByType(log, "assigned_lane", actorId);
+  const exitRoad = firstByType(log, "exit_road", actorId);
+
+  const arriveT = arrive?.t ?? null;
+  const assignedT = assigned?.t ?? null;
+  const exitT = exitRoad?.t ?? null;
+
+  const gateTimeSec =
+    arriveT != null
+      ? (assignedT != null ? assignedT - arriveT : Math.max(0, timeSec - arriveT))
+      : null;
+
+  const dwellSec =
+    arriveT != null
+      ? (exitT != null ? exitT - arriveT : Math.max(0, timeSec - arriveT))
+      : null;
+
+  const touchpoints = actorId ? countTouchpoints(log, actorId) : countTouchpoints(log);
+
+  // Simple detention heuristic: if dwell exceeds 4 hours (in-progress or finished)
+  const detentionRisk = dwellSec != null && dwellSec >= 4 * 3600;
+
+  return {
+    gateTimeSec,
+    dwellSec,
+    touchpoints,
+    detentionRisk,
+    completed: !!exitT,
+  };
+}
+
+export function opsMetrics(scenario: Scenario, timeSec: number, log: SimEvent[]) {
+  const truckIds = scenario.actors.filter((a) => a.kind === "truck").map((a) => a.id);
+
+  const queueing = truckIds.filter((id) => {
+    const q = firstByType(log, "queue_start", id);
+    const assigned = firstByType(log, "assigned_door", id);
+    return !!q && !assigned;
+  }).length;
+
+  const doors = scenario.doors ?? [];
+  const occupiedDoors = doors.filter((d) => {
+    return isDoorOccupied(log, d.id, timeSec);
+  }).length;
+
+  const doorUtilPct = doors.length > 0 ? Math.round((occupiedDoors / doors.length) * 100) : 0;
+
+  const moves = log.filter((e) => e.type === "yard_move").length;
+  const movesPerHour = timeSec > 0 ? Math.round((moves / timeSec) * 3600) : 0;
+
+  const exceptions = log.filter((e) => e.type === "exception").length;
+
+  const dwells = truckIds
+    .map((id) => {
+      const arrive = firstByType(log, "arrive", id);
+      if (!arrive) return null;
+      const exit = firstByType(log, "exit_road", id);
+      const endT = exit?.t ?? timeSec;
+      return Math.max(0, endT - arrive.t);
+    })
+    .filter((n): n is number => typeof n === "number");
+
+  const avgDwellSec = dwells.length ? Math.round(dwells.reduce((a, b) => a + b, 0) / dwells.length) : 0;
+
+  return {
+    queueing,
+    doorUtilPct,
+    movesPerHour,
+    exceptions,
+    avgDwellSec,
+  };
+}
+
+export function isDoorOccupied(log: SimEvent[], doorId: string, timeSec: number) {
+  const starts = log.filter((e) => e.type === "loading_start" && e.doorId === doorId);
+  const ends = log.filter((e) => e.type === "loading_end" && e.doorId === doorId);
+
+  const lastStart = starts[starts.length - 1];
+  const lastEnd = ends[ends.length - 1];
+
+  if (!lastStart) return false;
+  if (!lastEnd) return lastStart.t <= timeSec;
+  return lastStart.t > lastEnd.t && lastStart.t <= timeSec;
+}
+
+export function networkMetrics(mode: "before" | "after", facilitiesN: number) {
+  const N = Math.max(1, Math.min(30, facilitiesN));
+  // smooth saturation curve
+  const sat = (k: number) => 1 - Math.exp(-k * (N - 1));
+
+  const etaAccuracy =
+    mode === "before"
+      ? 0.45 + 0.12 * sat(0.06)
+      : 0.55 + (0.92 - 0.55) * sat(0.10);
+
+  const avgDwellMins =
+    mode === "before"
+      ? 170 - 18 * sat(0.06)
+      : 165 - 55 * sat(0.09);
+
+  const turnIndex =
+    mode === "before"
+      ? 1.00 + 0.06 * sat(0.05)
+      : 1.05 + 0.40 * sat(0.08);
+
+  const baselineDwell = 170; // mins (illustrative)
+  const dwellReductionMins = Math.max(0, baselineDwell - avgDwellMins);
+  // $ released (millions): dwell reduction → fewer buffers/detention/expedites (simple model)
+  const cashReleasedM =
+    mode === "before"
+      ? 0.02 * N * (dwellReductionMins / 60)
+      : 0.08 * N * (dwellReductionMins / 60);
+
+  return {
+    N,
+    etaAccuracy,
+    avgDwellMins,
+    turnIndex,
+    cashReleasedM,
+  };
 }

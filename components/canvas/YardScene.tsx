@@ -1,514 +1,266 @@
-'use client';
+"use client";
 
-import React, { useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { Actor, SimMode } from '@/engine/types';
+import { motion, useReducedMotion } from "framer-motion";
+import type { ActorMotion, Scenario, SimActor, Point } from "@/engine/simTypes";
+import { isDoorOccupied, networkMetrics } from "@/engine/metrics";
 
-interface YardSceneProps {
-  actors: Map<string, Actor>;
-  mode: SimMode;
-  scenarioType: 'driver' | 'facility' | 'network';
-  facilityCount?: number;
-  reducedMotion?: boolean;
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+function easeInOut(t: number) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+function interpPoint(from: Point, to: Point, t: number, ease?: "linear" | "easeInOut") {
+  const tt = ease === "easeInOut" ? easeInOut(t) : t;
+  return { x: lerp(from.x, to.x, tt), y: lerp(from.y, to.y, tt) };
 }
 
-export default function YardScene({ actors, mode, scenarioType, facilityCount = 1, reducedMotion = false }: YardSceneProps) {
-  const actorsList = useMemo(() => Array.from(actors.values()), [actors]);
+function positionFor(actorId: string, motions: ActorMotion[] | undefined, timeSec: number) {
+  const m = motions?.find((mm) => mm.actorId === actorId);
+  if (!m || m.segments.length === 0) return { x: 80, y: 360 };
 
-  if (scenarioType === 'network') {
-    return <NetworkScene mode={mode} facilityCount={facilityCount} reducedMotion={reducedMotion} />;
-  }
+  const seg =
+    m.segments.find((s) => timeSec >= s.t0 && timeSec <= s.t1) ??
+    (timeSec < m.segments[0].t0 ? m.segments[0] : m.segments[m.segments.length - 1]);
+
+  if (seg.t1 - seg.t0 <= 1e-6) return seg.to;
+  const t = Math.max(0, Math.min(1, (timeSec - seg.t0) / (seg.t1 - seg.t0)));
+  return interpPoint(seg.from, seg.to, t, seg.ease);
+}
+
+function TruckGlyph({ x, y, mode }: { x: number; y: number; mode: "before" | "after" }) {
+  const stroke = mode === "after" ? "rgba(0,255,194,0.55)" : "rgba(255,255,255,0.35)";
+  const fill = mode === "after" ? "rgba(0,255,194,0.12)" : "rgba(255,255,255,0.06)";
+  return (
+    <g transform={`translate(${x},${y})`}>
+      {/* trailer */}
+      <rect x={-34} y={-12} width={44} height={24} rx={6} fill={fill} stroke={stroke} strokeWidth={2} />
+      {/* cab */}
+      <rect x={12} y={-10} width={22} height={20} rx={6} fill={fill} stroke={stroke} strokeWidth={2} />
+      <circle cx={-18} cy={14} r={4} fill={stroke} opacity={0.6} />
+      <circle cx={20} cy={14} r={4} fill={stroke} opacity={0.6} />
+    </g>
+  );
+}
+
+function SpotterGlyph({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <rect x={-10} y={-8} width={20} height={16} rx={5} fill="rgba(64,160,255,0.10)" stroke="rgba(64,160,255,0.55)" strokeWidth={2} />
+      <circle cx={-6} cy={10} r={3} fill="rgba(64,160,255,0.6)" />
+      <circle cx={6} cy={10} r={3} fill="rgba(64,160,255,0.6)" />
+    </g>
+  );
+}
+
+function DoorBox({
+  id,
+  label,
+  at,
+  occupied,
+  after,
+}: {
+  id: string;
+  label: string;
+  at: Point;
+  occupied: boolean;
+  after: boolean;
+}) {
+  const stroke = after ? "rgba(0,255,194,0.45)" : "rgba(255,255,255,0.25)";
+  const occ = occupied ? (after ? "rgba(0,255,194,0.18)" : "rgba(255,170,0,0.16)") : "rgba(255,255,255,0.04)";
+  return (
+    <g transform={`translate(${at.x},${at.y})`}>
+      <rect x={-60} y={-26} width={120} height={52} rx={14} fill={occ} stroke={stroke} strokeWidth={2} />
+      <text x={0} y={-3} textAnchor="middle" fontSize="12" fill="rgba(255,255,255,0.85)" fontFamily="ui-monospace, SFMono-Regular">
+        {label}
+      </text>
+      <text x={0} y={14} textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.5)" fontFamily="ui-monospace, SFMono-Regular">
+        {occupied ? "OCCUPIED" : "IDLE"}
+      </text>
+      <text x={-48} y={-10} fontSize="10" fill="rgba(255,255,255,0.4)" fontFamily="ui-monospace, SFMono-Regular">
+        {id}
+      </text>
+    </g>
+  );
+}
+
+function NetworkScene({
+  mode,
+  facilitiesN,
+  timeSec,
+}: {
+  mode: "before" | "after";
+  facilitiesN: number;
+  timeSec: number;
+}) {
+  const reduce = useReducedMotion();
+  const m = networkMetrics(mode, facilitiesN);
+
+  const cols = 6;
+  const rows = 5;
+  const total = cols * rows;
+  const active = Math.min(total, m.N);
+
+  const pulse = reduce ? 0 : (Math.sin(timeSec * 2.2) + 1) / 2; // 0..1
+
+  const nodeStroke = mode === "after" ? "rgba(0,255,194,0.5)" : "rgba(255,255,255,0.25)";
+  const nodeFillOn = mode === "after" ? `rgba(0,255,194,${0.10 + 0.12 * pulse})` : `rgba(255,255,255,${0.04 + 0.06 * pulse})`;
+  const nodeFillOff = "rgba(255,255,255,0.03)";
 
   return (
-    <div className="relative w-full h-[500px] bg-gradient-to-br from-[#0b1220] to-[#0a0f1a] rounded-xl overflow-hidden">
-      {/* Subtle grid background */}
-      <div 
-        className="absolute inset-0 opacity-20"
-        style={{
-          backgroundImage: `
-            linear-gradient(rgba(56, 189, 248, 0.1) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(56, 189, 248, 0.1) 1px, transparent 1px)
-          `,
-          backgroundSize: '40px 40px',
-        }}
-      />
+    <svg viewBox="0 0 1000 600" className="h-full w-full">
+      <defs>
+        <radialGradient id="glow" cx="50%" cy="45%" r="60%">
+          <stop offset="0%" stopColor={mode === "after" ? "rgba(0,255,194,0.20)" : "rgba(255,255,255,0.10)"} />
+          <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+        </radialGradient>
+      </defs>
 
-      <svg viewBox="0 0 800 600" className="w-full h-full">
-        <defs>
-          {/* Gradient for roads */}
-          <linearGradient id="roadGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="rgba(255,255,255,0.05)" />
-            <stop offset="100%" stopColor="rgba(255,255,255,0.02)" />
-          </linearGradient>
-        </defs>
+      <rect x="0" y="0" width="1000" height="600" fill="rgba(0,0,0,0)" />
+      <circle cx="500" cy="280" r="300" fill="url(#glow)" />
 
-        {/* Inbound Road */}
-        <path
-          d="M 0 420 L 140 420"
-          stroke="rgba(255,255,255,0.1)"
-          strokeWidth="30"
-          fill="none"
-        />
-        
-        {/* Gate Area */}
-        <rect
-          x="140"
-          y="390"
-          width="60"
-          height="60"
-          fill="none"
-          stroke={mode === 'after' ? 'rgba(56,189,248,0.3)' : 'rgba(255,255,255,0.15)'}
-          strokeWidth="2"
-          rx="4"
-        />
-        
-        {/* QR Scanner (After mode only) */}
-        {mode === 'after' && (
-          <g>
-            {/* Scanner kiosk */}
-            <rect x="160" y="405" width="20" height="30" fill="rgba(56,189,248,0.2)" stroke="rgba(56,189,248,0.5)" strokeWidth="1.5" rx="2" />
-            {/* Scanner screen with pulse */}
-            <motion.rect
-              x="163"
-              y="410"
-              width="14"
-              height="20"
-              fill="#0a0f1a"
-              stroke="#22d3ee"
-              strokeWidth="1"
-              rx="1"
+      {/* links */}
+      {mode === "after" &&
+        Array.from({ length: active }).map((_, i) => {
+          const r = Math.floor(i / cols);
+          const c = i % cols;
+          const x = 190 + c * 130;
+          const y = 140 + r * 90;
+          if (i === 0) return null;
+          const p = Math.max(0, i - 1);
+          const pr = Math.floor(p / cols);
+          const pc = p % cols;
+          const x2 = 190 + pc * 130;
+          const y2 = 140 + pr * 90;
+
+          return (
+            <line
+              key={`l-${i}`}
+              x1={x2}
+              y1={y2}
+              x2={x}
+              y2={y}
+              stroke={`rgba(0,255,194,${0.08 + 0.18 * pulse})`}
+              strokeWidth={2}
             />
-            {/* Scanning beam */}
-            <motion.line
-              x1="165"
-              x2="175"
-              y1="415"
-              y2="415"
-              stroke="#22d3ee"
-              strokeWidth="1"
-              initial={{ y1: 415, y2: 415 }}
-              animate={reducedMotion ? {} : { y1: [415, 425, 415], y2: [415, 425, 415] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            />
-            {/* Status indicator */}
-            <motion.circle
-              cx="170"
-              cy="420"
-              r="2"
-              fill="#22d3ee"
-              initial={{ opacity: 0.5 }}
-              animate={reducedMotion ? { opacity: 1 } : { opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            />
-          </g>
-        )}
-
-        {/* Yard Lanes */}
-        <path
-          d="M 200 400 Q 300 350, 400 320"
-          stroke="url(#roadGradient)"
-          strokeWidth="25"
-          fill="none"
-        />
-
-        {/* Dock Buildings */}
-        <g>
-          {/* Building outline */}
-          <path
-            d="M 340 240 L 480 240 L 480 380 L 340 380 Z"
-            fill="rgba(15,23,42,0.8)"
-            stroke="rgba(255,255,255,0.15)"
-            strokeWidth="2"
-          />
-          
-          {/* Dock Doors */}
-          {[0, 1, 2].map((i) => (
-            <g key={i} transform={`translate(0, ${i * 40})`}>
-              <rect
-                x="340"
-                y={260 + i * 40}
-                width="40"
-                height="30"
-                fill="rgba(30,41,59,0.9)"
-                stroke={mode === 'after' ? 'rgba(56,189,248,0.3)' : 'rgba(255,255,255,0.1)'}
-                strokeWidth="2"
-                rx="2"
-              />
-              
-              {/* Door status indicator */}
-              {scenarioType === 'facility' && (
-                <g>
-                  <motion.circle
-                    cx="360"
-                    cy={275 + i * 40}
-                    r="4"
-                    fill={mode === 'after' ? '#22d3ee' : '#94a3b8'}
-                    initial={{ opacity: 0.5 }}
-                    animate={reducedMotion ? { opacity: 0.8 } : { opacity: [0.5, 1, 0.5] }}
-                    transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.3 }}
-                  />
-                  {/* Door number label */}
-                  <text
-                    x="360"
-                    y={278 + i * 40}
-                    fontSize="8"
-                    fill="white"
-                    textAnchor="middle"
-                    opacity="0.6"
-                  >
-                    {i + 1}
-                  </text>
-                </g>
-              )}
-            </g>
-          ))}
-        </g>
-
-        {/* Exit Road */}
-        <path
-          d="M 480 300 Q 600 240, 800 180"
-          stroke="rgba(255,255,255,0.1)"
-          strokeWidth="28"
-          fill="none"
-        />
-        
-        {/* Exit Gate */}
-        <rect
-          x="500"
-          y="275"
-          width="50"
-          height="50"
-          fill="none"
-          stroke={mode === 'after' ? 'rgba(56,189,248,0.25)' : 'rgba(255,255,255,0.12)'}
-          strokeWidth="2"
-          rx="4"
-        />
-
-        {/* Route Highlight (After mode) */}
-        {mode === 'after' && (
-          <motion.path
-            d="M 140 420 L 200 400 Q 300 350, 350 320 L 380 300"
-            stroke="rgba(56,189,248,0.4)"
-            strokeWidth="3"
-            fill="none"
-            strokeDasharray="8 4"
-            initial={{ pathLength: 0, opacity: 0 }}
-            animate={{ pathLength: 1, opacity: [0, 0.6, 0.4] }}
-            transition={{ duration: 2, delay: 0.5 }}
-          />
-        )}
-
-        {/* Render Actors */}
-        {actorsList.map((actor) => {
-          if (actor.type === 'truck') {
-            return <Truck key={actor.id} actor={actor} mode={mode} />;
-          } else if (actor.type === 'spotter') {
-            return <Spotter key={actor.id} actor={actor} mode={mode} />;
-          } else if (actor.type === 'door') {
-            return null; // Doors are already rendered as part of building
-          }
-          return null;
+          );
         })}
 
-        {/* Queue visualization for facility scenario */}
-        {scenarioType === 'facility' && (
-          <g>
-            {actorsList
-              .filter(a => a.type === 'truck' && a.status === 'queue_start')
-              .slice(0, 5)
-              .map((actor, i) => (
-                <motion.circle
-                  key={`queue-${actor.id}`}
-                  cx={110 + i * 15}
-                  cy={440 - i * 8}
-                  r="6"
-                  fill={mode === 'before' ? 'rgba(251,191,36,0.6)' : 'rgba(56,189,248,0.5)'}
-                  stroke={mode === 'before' ? 'rgba(251,191,36,0.8)' : 'rgba(56,189,248,0.7)'}
-                  strokeWidth="2"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: i * 0.1 }}
-                />
-              ))}
+      {/* nodes */}
+      {Array.from({ length: total }).map((_, i) => {
+        const r = Math.floor(i / cols);
+        const c = i % cols;
+        const x = 190 + c * 130;
+        const y = 140 + r * 90;
+        const on = i < active;
+
+        return (
+          <g key={i} transform={`translate(${x},${y})`}>
+            <circle r={18} fill={on ? nodeFillOn : nodeFillOff} stroke={nodeStroke} strokeWidth={2} />
+            <circle r={6} fill={on ? nodeStroke : "rgba(255,255,255,0.12)"} opacity={0.8} />
           </g>
-        )}
-      </svg>
-    </div>
+        );
+      })}
+
+      <text x="40" y="560" fontSize="12" fill="rgba(255,255,255,0.55)" fontFamily="ui-monospace, SFMono-Regular">
+        {mode === "after" ? "Shared protocol pulses across nodes → predictability compounds." : "Isolated yards → no compounding intelligence."}
+      </text>
+    </svg>
   );
 }
 
-function Truck({ actor, mode }: { actor: Actor; mode: SimMode }) {
-  const color = mode === 'before' ? '#fbbf24' : '#22d3ee';
-  
+export default function YardScene({
+  scenario,
+  timeSec,
+  log,
+  facilitiesN,
+}: {
+  scenario: Scenario;
+  timeSec: number;
+  log: any[];
+  facilitiesN: number;
+}) {
+  const reduce = useReducedMotion();
+
+  if (scenario.tab === "network") {
+    return <NetworkScene mode={scenario.mode} facilitiesN={facilitiesN} timeSec={timeSec} />;
+  }
+
+  const after = scenario.mode === "after";
+  const route = scenario.routeHint ?? [];
+
   return (
-    <motion.g
-      initial={{ x: actor.x, y: actor.y }}
-      animate={{ x: actor.x, y: actor.y, rotate: actor.rotation || 0 }}
-      transition={{ duration: 0.5, ease: 'easeInOut' }}
-    >
-      {/* Trailer */}
-      <rect
-        x={-15}
-        y={-8}
-        width="28"
-        height="16"
-        fill={`${color}22`}
-        stroke={color}
-        strokeWidth="2"
-        rx="2"
-      />
-      {/* Trailer details */}
-      <line x1="-10" y1="-8" x2="-10" y2="8" stroke={color} strokeWidth="0.5" opacity="0.4" />
-      <line x1="0" y1="-8" x2="0" y2="8" stroke={color} strokeWidth="0.5" opacity="0.4" />
-      
-      {/* Truck cab */}
-      <rect
-        x={-15}
-        y={-6}
-        width="10"
-        height="12"
-        fill={color}
-        opacity="0.9"
-        rx="1"
-      />
-      {/* Cab window */}
-      <rect
-        x={-13}
-        y={-4}
-        width="6"
-        height="4"
-        fill="rgba(255,255,255,0.3)"
-      />
-      
-      {/* Wheels */}
-      <circle cx="-8" cy="8" r="2" fill="#1e293b" stroke={color} strokeWidth="1" />
-      <circle cx="8" cy="8" r="2" fill="#1e293b" stroke={color} strokeWidth="1" />
-      
-      {/* Status indicator badges */}
-      {actor.status === 'qr_scan' && (
-        <g>
-          <motion.circle
-            cx="0"
-            cy="-18"
-            r="6"
-            fill="#22d3ee"
-            initial={{ scale: 0 }}
-            animate={{ scale: [0, 1.3, 1] }}
-            transition={{ duration: 0.4 }}
+    <div className="relative h-[360px] w-full overflow-hidden rounded-2xl border border-white/10 bg-black/20 md:h-[520px]">
+      <div className="absolute inset-0 bg-grid opacity-60" />
+      <svg viewBox="0 0 1000 600" className="relative h-full w-full">
+        {/* yard base */}
+        <rect x="40" y="120" width="920" height="420" rx="26" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.08)" strokeWidth={2} />
+
+        {/* road */}
+        <path
+          d="M60 360 L940 360"
+          stroke="rgba(255,255,255,0.10)"
+          strokeWidth={10}
+          strokeLinecap="round"
+        />
+        <path d="M60 360 L940 360" stroke="rgba(255,255,255,0.20)" strokeWidth={2} strokeDasharray="10 12" />
+
+        {/* gate */}
+        <rect x="205" y="330" width="50" height="60" rx="12" fill="rgba(0,0,0,0)" stroke={after ? "rgba(0,255,194,0.35)" : "rgba(255,255,255,0.22)"} strokeWidth={2} />
+        <text x="230" y="325" textAnchor="middle" fontSize="11" fill="rgba(255,255,255,0.55)" fontFamily="ui-monospace, SFMono-Regular">
+          GATE
+        </text>
+
+        {/* route hint (after mode) */}
+        {after && route.length >= 2 && !reduce && (
+          <motion.path
+            d={route
+              .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
+              .join(" ")}
+            fill="none"
+            stroke="rgba(0,255,194,0.30)"
+            strokeWidth={6}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 1.2, ease: "easeInOut" }}
           />
-          {/* QR icon */}
-          <motion.rect
-            x="-3"
-            y="-21"
-            width="6"
-            height="6"
-            fill="white"
-            rx="0.5"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          />
-        </g>
-      )}
-      {actor.status === 'wrong_turn' && (
-        <motion.g
-          initial={{ scale: 0 }}
-          animate={{ scale: [0, 1.2, 1] }}
-          transition={{ duration: 0.3 }}
-        >
-          <circle cx="0" cy="-18" r="6" fill="#ef4444" />
-          {/* X mark */}
-          <line x1="-3" y1="-21" x2="3" y2="-15" stroke="white" strokeWidth="2" />
-          <line x1="3" y1="-21" x2="-3" y2="-15" stroke="white" strokeWidth="2" />
-        </motion.g>
-      )}
-      {actor.status === 'verified' && (
-        <motion.g
-          initial={{ scale: 0 }}
-          animate={{ scale: [0, 1.2, 1] }}
-          transition={{ duration: 0.3 }}
-        >
-          <circle cx="0" cy="-18" r="6" fill="#22d3ee" />
-          {/* Check mark */}
-          <path d="M -2 -18 L 0 -16 L 3 -21" stroke="white" strokeWidth="2" fill="none" />
-        </motion.g>
-      )}
-    </motion.g>
-  );
-}
-
-function Spotter({ actor, mode }: { actor: Actor; mode: SimMode }) {
-  return (
-    <motion.g
-      initial={{ x: actor.x, y: actor.y }}
-      animate={{ x: actor.x, y: actor.y }}
-      transition={{ duration: 1, ease: 'linear' }}
-    >
-      {/* Spotter vehicle body - small tug */}
-      <rect
-        x="-8"
-        y="-5"
-        width="16"
-        height="10"
-        fill={mode === 'after' ? 'rgba(56,189,248,0.3)' : 'rgba(148,163,184,0.3)'}
-        stroke={mode === 'after' ? '#22d3ee' : '#94a3b8'}
-        strokeWidth="2"
-        rx="2"
-      />
-      {/* Cab */}
-      <rect
-        x="-8"
-        y="-3"
-        width="6"
-        height="6"
-        fill={mode === 'after' ? '#22d3ee' : '#94a3b8'}
-        opacity="0.8"
-      />
-      {/* Motion indicator */}
-      <motion.circle
-        cx="0"
-        cy="0"
-        r="3"
-        fill={mode === 'after' ? '#22d3ee' : '#94a3b8'}
-        opacity="0.6"
-      />
-    </motion.g>
-  );
-}
-
-function NetworkScene({ mode, facilityCount, reducedMotion }: { mode: SimMode; facilityCount: number; reducedMotion?: boolean }) {
-  const gridSize = 6;
-  const cellSize = 80;
-  const offsetX = 100;
-  const offsetY = 80;
-
-  // Generate facility positions in a grid
-  const facilities = useMemo(() => {
-    const positions = [];
-    for (let i = 0; i < Math.min(facilityCount, 30); i++) {
-      const row = Math.floor(i / gridSize);
-      const col = i % gridSize;
-      positions.push({
-        x: offsetX + col * cellSize,
-        y: offsetY + row * cellSize,
-        id: i,
-      });
-    }
-    return positions;
-  }, [facilityCount]);
-
-  return (
-    <div className="relative w-full h-[500px] bg-gradient-to-br from-[#0b1220] to-[#0a0f1a] rounded-xl overflow-hidden">
-      <svg viewBox="0 0 800 600" className="w-full h-full">
-        {/* Connection lines (after mode only) */}
-        {mode === 'after' && facilities.length > 1 && (
-          <g opacity="0.3">
-            {facilities.slice(0, -1).map((fac, i) => {
-              const next = facilities[i + 1];
-              if (!next) return null;
-              
-              return (
-                <motion.line
-                  key={`line-${i}`}
-                  x1={fac.x}
-                  y1={fac.y}
-                  x2={next.x}
-                  y2={next.y}
-                  stroke="#22d3ee"
-                  strokeWidth="1"
-                  strokeDasharray="4 2"
-                  initial={{ pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={{ duration: 1, delay: i * 0.05 }}
-                />
-              );
-            })}
-          </g>
         )}
 
-        {/* Facility nodes */}
-        {facilities.map((fac, i) => (
-          <motion.g
-            key={`facility-${fac.id}`}
-            initial={{ opacity: 0, scale: 0 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: i * 0.05, duration: 0.3 }}
-          >
-            {/* Node circle */}
-            <circle
-              cx={fac.x}
-              cy={fac.y}
-              r="12"
-              fill={mode === 'after' ? 'rgba(56,189,248,0.2)' : 'rgba(148,163,184,0.15)'}
-              stroke={mode === 'after' ? '#22d3ee' : '#64748b'}
-              strokeWidth="2"
-            />
-            
-            {/* Pulsing indicator (after mode) */}
-            {mode === 'after' && (
-              <motion.circle
-                cx={fac.x}
-                cy={fac.y}
-                r="4"
-                fill="#22d3ee"
-                initial={{ opacity: 0.8 }}
-                animate={reducedMotion ? { opacity: 0.8 } : { opacity: [0.8, 0.3, 0.8] }}
-                transition={{ duration: 2, repeat: Infinity, delay: i * 0.1 }}
-              />
-            )}
-            
-            {/* Mini building icon */}
-            <rect
-              x={fac.x - 6}
-              y={fac.y - 6}
-              width="12"
-              height="12"
-              fill="none"
-              stroke={mode === 'after' ? 'rgba(56,189,248,0.6)' : 'rgba(148,163,184,0.4)'}
-              strokeWidth="1"
-            />
-          </motion.g>
+        {/* dock zone */}
+        <rect x="690" y="140" width="250" height="380" rx="22" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.08)" strokeWidth={2} />
+        <text x="815" y="132" textAnchor="middle" fontSize="12" fill="rgba(255,255,255,0.55)" fontFamily="ui-monospace, SFMono-Regular">
+          DOCKS
+        </text>
+
+        {/* doors */}
+        {(scenario.doors ?? []).map((d) => (
+          <DoorBox
+            key={d.id}
+            id={d.id}
+            label={d.label}
+            at={d.at}
+            occupied={isDoorOccupied(log, d.id, timeSec)}
+            after={after}
+          />
         ))}
 
-        {/* Protocol pulses (after mode) */}
-        {mode === 'after' && facilityCount > 1 && (
-          <g>
-            {[0, 1, 2].map((pulseId) => (
-              <motion.circle
-                key={`pulse-${pulseId}`}
-                cx={facilities[0]?.x || 0}
-                cy={facilities[0]?.y || 0}
-                r="8"
-                fill="none"
-                stroke="#22d3ee"
-                strokeWidth="2"
-                initial={{ scale: 0, opacity: 1 }}
-                animate={{ 
-                  scale: [0, 3, 6],
-                  opacity: [1, 0.5, 0],
-                }}
-                transition={{
-                  duration: 3,
-                  repeat: Infinity,
-                  delay: pulseId * 1,
-                }}
-              />
-            ))}
-          </g>
-        )}
-      </svg>
+        {/* actors */}
+        {scenario.actors.map((a: SimActor) => {
+          const pos = positionFor(a.id, scenario.motions, timeSec);
+          if (a.kind === "spotter") return <SpotterGlyph key={a.id} x={pos.x} y={pos.y} />;
+          return <TruckGlyph key={a.id} x={pos.x} y={pos.y} mode={scenario.mode} />;
+        })}
 
-      {/* Network Effect Label */}
-      <div className="absolute top-4 left-4">
-        <div className="rounded-lg border border-white/10 bg-black/40 backdrop-blur-xl px-3 py-2">
-          <div className="text-xs font-semibold uppercase tracking-wider text-white/60">
-            {mode === 'after' ? 'Standardized Network' : 'Isolated Facilities'}
-          </div>
-          <div className={`text-lg font-bold ${mode === 'after' ? 'text-cyan-400' : 'text-white/50'}`}>
-            {facilityCount} {facilityCount === 1 ? 'Facility' : 'Facilities'}
-          </div>
-        </div>
-      </div>
+        {/* labels */}
+        <text x="60" y="150" fontSize="12" fill="rgba(255,255,255,0.5)" fontFamily="ui-monospace, SFMono-Regular">
+          {scenario.title}
+        </text>
+        <text x="60" y="170" fontSize="11" fill="rgba(255,255,255,0.35)" fontFamily="ui-sans-serif, system-ui">
+          {scenario.description}
+        </text>
+      </svg>
     </div>
   );
 }
