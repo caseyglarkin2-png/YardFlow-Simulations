@@ -2,47 +2,40 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, Gauge } from 'lucide-react';
+import { ArrowRight, Gauge, Activity, TrendingUp } from 'lucide-react';
 import { IsometricYard } from './IsometricYard';
-import { AnimatedTruck } from './AnimatedTruck';
+import { YardJourneyTruck } from './TruckPathAnim';
 
 function FacilityScene({
   mode,
-  intensity,
+  throughput,
 }: {
   mode: 'before' | 'after';
-  intensity: number; // 0-1
+  throughput: number; // 0-100 (arrival rate)
 }) {
-  // Show queue and flow based on mode and intensity
+  // Calculate metrics based on mode and throughput
+  const scale = throughput / 100;
+  
   const queueCount = mode === 'before' 
-    ? Math.round(2 + intensity * 6)  // 2-8 trucks waiting
-    : Math.round(1 + intensity * 2); // 1-3 trucks waiting
-
-  const truckPaths = [
-    // Path 1: Quick flow (after) vs slow (before)
-    [
-      { x: 100, y: 420, rotation: -15 },
-      { x: 180, y: 380, rotation: -20 },
-      { x: 260, y: 340, rotation: -25 },
-      { x: 320, y: 310, rotation: -30 },
-    ],
-    // Path 2: Secondary flow
-    [
-      { x: 120, y: 400, rotation: -15 },
-      { x: 200, y: 360, rotation: -20 },
-      { x: 280, y: 320, rotation: -30 },
-    ],
-    // Path 3: Tertiary (only in "after" with higher intensity)
-    [
-      { x: 140, y: 390, rotation: -15 },
-      { x: 220, y: 350, rotation: -20 },
-      { x: 300, y: 310, rotation: -30 },
-    ],
-  ];
+    ? Math.round(3 + scale * 9)  // 3-12 trucks in before
+    : Math.round(1 + scale * 3); // 1-4 trucks in after
 
   const doorUtil = mode === 'before' 
-    ? Math.round(45 + intensity * 15)  // 45-60%
-    : Math.round(75 + intensity * 15); // 75-90%
+    ? Math.round(45 + scale * 20)  // 45-65%
+    : Math.round(75 + scale * 20); // 75-95%
+
+  const avgDwell = mode === 'before'
+    ? Math.round(180 - scale * 30)  // 180-150min
+    : Math.round(110 - scale * 30); // 110-80min
+
+  const trucksPerHour = mode === 'before'
+    ? Math.round(8 + scale * 4)  // 8-12/hr
+    : Math.round(14 + scale * 8); // 14-22/hr
+
+  // Number of simultaneous trucks in yard based on throughput
+  const truckCount = mode === 'after' 
+    ? Math.min(5, Math.max(2, Math.round(scale * 5)))
+    : Math.min(3, Math.max(1, Math.round(scale * 3)));
 
   return (
     <div className="relative h-[500px] w-full">
@@ -54,46 +47,28 @@ function FacilityScene({
         className="absolute inset-0 h-full w-full"
         style={{ pointerEvents: 'none' }}
       >
-        {/* Main flow truck - always visible */}
-        <AnimatedTruck
-          path={truckPaths[0]}
-          duration={mode === 'before' ? 14 : 9}
-          color={mode === 'before' ? 'rgba(244,63,94,0.8)' : 'rgba(56,189,248,0.9)'}
-        />
-        
-        {/* Second truck - depends on intensity */}
-        {intensity > 0.3 && (
-          <AnimatedTruck
-            path={truckPaths[1]}
-            duration={mode === 'before' ? 16 : 10}
-            delay={mode === 'before' ? 6 : 3}
-            color={mode === 'before' ? 'rgba(244,63,94,0.7)' : 'rgba(56,189,248,0.8)'}
+        {/* Multiple trucks showing throughput */}
+        {Array.from({ length: truckCount }).map((_, i) => (
+          <YardJourneyTruck
+            key={i}
+            mode={mode}
+            delay={i * (mode === 'after' ? 3 : 5)}
           />
-        )}
+        ))}
 
-        {/* Third truck - only in "after" with high intensity */}
-        {mode === 'after' && intensity > 0.6 && (
-          <AnimatedTruck
-            path={truckPaths[2]}
-            duration={8}
-            delay={5}
-            color="rgba(56,189,248,0.7)"
-          />
-        )}
-
-        {/* Queue visualization - circles representing waiting trucks */}
+        {/* Queue visualization - circles at gate representing waiting trucks */}
         {Array.from({ length: queueCount }).map((_, i) => (
           <motion.circle
-            key={i}
-            cx={90 + i * 15}
-            cy={440 - i * 8}
-            r="8"
-            fill={mode === 'before' ? 'rgba(244,63,94,0.6)' : 'rgba(56,189,248,0.5)'}
-            stroke={mode === 'before' ? 'rgba(244,63,94,0.8)' : 'rgba(56,189,248,0.7)'}
+            key={`queue-${i}`}
+            cx={50 + i * 12}
+            cy={470 - i * 6}
+            r="7"
+            fill={mode === 'before' ? 'rgba(244,63,94,0.5)' : 'rgba(56,189,248,0.4)'}
+            stroke={mode === 'before' ? 'rgba(244,63,94,0.7)' : 'rgba(56,189,248,0.6)'}
             strokeWidth="2"
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            transition={{ delay: i * 0.1 }}
+            transition={{ delay: i * 0.08 }}
           />
         ))}
       </svg>
@@ -126,6 +101,33 @@ function FacilityScene({
             {doorUtil}%
           </div>
         </motion.div>
+        <motion.div
+          className="rounded-xl border border-white/10 bg-black/40 backdrop-blur-xl px-4 py-3"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+        >
+          <div className="text-xs font-semibold uppercase tracking-wider text-white/60 mb-1">
+            Avg Dwell
+          </div>
+          <div className={`text-2xl font-bold ${mode === 'before' ? 'text-rose-400' : 'text-cyan-400'}`}>
+            {avgDwell}m
+          </div>
+        </motion.div>
+
+        <motion.div
+          className="rounded-xl border border-white/10 bg-black/40 backdrop-blur-xl px-4 py-3"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <div className="text-xs font-semibold uppercase tracking-wider text-white/60 mb-1">
+            Trucks/hr
+          </div>
+          <div className={`text-2xl font-bold ${mode === 'before' ? 'text-rose-400' : 'text-cyan-400'}`}>
+            {trucksPerHour}
+          </div>
+        </motion.div>
       </div>
     </div>
   );
@@ -133,7 +135,7 @@ function FacilityScene({
 
 export default function FacilityOpsSim() {
   const [mode, setMode] = useState<'before' | 'after'>('before');
-  const [intensity, setIntensity] = useState(0.6); // 0-1
+  const [throughput, setThroughput] = useState(60); // 0-100
 
   return (
     <div className="relative">
@@ -152,7 +154,7 @@ export default function FacilityOpsSim() {
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl overflow-hidden relative">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_40%_40%,rgba(56,189,248,0.08),transparent_60%)]" />
             <div className="relative">
-              <FacilityScene mode={mode} intensity={intensity} />
+              <FacilityScene mode={mode} throughput={throughput} />
             </div>
           </div>
         </div>
@@ -180,11 +182,11 @@ export default function FacilityOpsSim() {
             </div>
           </button>
 
-          {/* Intensity slider */}
+          {/* Throughput slider */}
           <div className="rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-xl p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="text-sm font-semibold uppercase tracking-wider text-white/60">
-                Arrival Intensity
+                Arrival Rate
               </div>
               <Gauge className="h-4 w-4 text-white/60" />
             </div>
@@ -192,11 +194,11 @@ export default function FacilityOpsSim() {
               type="range"
               min="0"
               max="100"
-              value={intensity * 100}
-              onChange={(e) => setIntensity(parseInt(e.target.value) / 100)}
+              value={throughput}
+              onChange={(e) => setThroughput(parseInt(e.target.value))}
               className="w-full h-2 rounded-full appearance-none cursor-pointer bg-white/10"
               style={{
-                background: `linear-gradient(to right, rgba(56,189,248,0.5) 0%, rgba(56,189,248,0.5) ${intensity * 100}%, rgba(255,255,255,0.1) ${intensity * 100}%, rgba(255,255,255,0.1) 100%)`,
+                background: `linear-gradient(to right, rgba(56,189,248,0.5) 0%, rgba(56,189,248,0.5) ${throughput}%, rgba(255,255,255,0.1) ${throughput}%, rgba(255,255,255,0.1) 100%)`,
               }}
             />
             <div className="flex justify-between mt-2 text-xs text-white/60">
