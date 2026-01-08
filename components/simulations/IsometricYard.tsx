@@ -161,22 +161,159 @@ export function IsometricYard({
         />
       </g>
 
-      {/* Road/path from gate to warehouse */}
+      {/* Road/path: inbound lane → ingate → yard route → outgate → outbound lane */}
+      {/* Inbound lane (before fence) */}
       <path
-        d="M 180 390 L 220 370 L 300 320 L 360 290 L 280 240"
+        d="M 20 480 L 80 450 L 140 420"
         fill="none"
         stroke="url(#roadGrad)"
         strokeWidth="50"
-        opacity="0.6"
+        opacity="0.5"
       />
       <path
-        d="M 185 388 L 225 368 L 305 318 L 360 290"
+        d="M 25 478 L 85 448 L 143 418"
         fill="none"
         stroke="rgba(255,255,255,0.15)"
         strokeWidth="2"
         strokeDasharray="12 8"
         opacity="0.4"
       />
+      
+      {/* Internal yard road */}
+      <path
+        d="M 140 420 L 180 395 L 220 370 L 280 340 L 340 315 L 400 290 L 460 270"
+        fill="none"
+        stroke="url(#roadGrad)"
+        strokeWidth="50"
+        opacity="0.6"
+      />
+      <path
+        d="M 145 418 L 185 393 L 225 368 L 285 338 L 345 313 L 405 288 L 463 268"
+        fill="none"
+        stroke="rgba(255,255,255,0.15)"
+        strokeWidth="2"
+        strokeDasharray="12 8"
+        opacity="0.4"
+      />
+      
+      {/* Outbound exit lane (past fence) */}
+      <path
+        d="M 460 270 L 520 250 L 580 235 L 640 225 L 700 220 L 760 220"
+        fill="none"
+        stroke="url(#roadGrad)"
+        strokeWidth="50"
+        opacity="0.5"
+      />
+      <path
+        d="M 463 268 L 523 248 L 583 233 L 643 223 L 703 218 L 763 218"
+        fill="none"
+        stroke="rgba(255,255,255,0.15)"
+        strokeWidth="2"
+        strokeDasharray="12 8"
+        opacity="0.4"
+      />
+      
+      {/* Fence/boundary markers */}
+      <line
+        x1="120"
+        y1="430"
+        x2="135"
+        y2="422"
+        stroke="rgba(255,255,255,0.3)"
+        strokeWidth="3"
+        opacity="0.6"
+      />
+      <line
+        x1="470"
+        y1="280"
+        x2="485"
+        y2="272"
+        stroke="rgba(255,255,255,0.3)"
+        strokeWidth="3"
+        opacity="0.6"
+      />
+      
+      {/* INGATE structure */}
+      <g id="ingate">
+        {/* QR kiosk/pedestal */}
+        <rect
+          x="125"
+          y="410"
+          width="12"
+          height="20"
+          fill="rgba(50,60,75,1)"
+          stroke="rgba(255,255,255,0.3)"
+          strokeWidth="1.5"
+          rx="2"
+        />
+        {/* QR scanner screen */}
+        <rect
+          x="127"
+          y="412"
+          width="8"
+          height="10"
+          fill={showActivity ? 'rgba(56,189,248,0.6)' : 'rgba(30,35,45,1)'}
+          stroke={showActivity ? 'rgba(56,189,248,0.8)' : 'rgba(255,255,255,0.2)'}
+          strokeWidth="1"
+          rx="1"
+          filter={showActivity ? "url(#glow)" : undefined}
+        />
+        
+        {/* Gate barrier arm */}
+        <motion.line
+          x1="140"
+          y1="418"
+          x2="160"
+          y2="410"
+          stroke="rgba(244,63,94,0.8)"
+          strokeWidth="3"
+          strokeLinecap="round"
+          animate={showActivity ? { rotate: [-5, 85, -5], x: [0, 5, 0] } : {}}
+          transition={showActivity ? { duration: 4, repeat: Infinity, ease: 'easeInOut' } : {}}
+          style={{ transformOrigin: '140px 418px' }}
+        />
+      </g>
+      
+      {/* OUTGATE structure */}
+      <g id="outgate">
+        {/* Outgate kiosk */}
+        <rect
+          x="463"
+          y="260"
+          width="12"
+          height="18"
+          fill="rgba(50,60,75,1)"
+          stroke="rgba(255,255,255,0.3)"
+          strokeWidth="1.5"
+          rx="2"
+        />
+        {/* Outgate screen */}
+        <rect
+          x="465"
+          y="262"
+          width="8"
+          height="9"
+          fill={showActivity ? 'rgba(56,189,248,0.6)' : 'rgba(30,35,45,1)'}
+          stroke={showActivity ? 'rgba(56,189,248,0.8)' : 'rgba(255,255,255,0.2)'}
+          strokeWidth="1"
+          rx="1"
+          filter={showActivity ? "url(#glow)" : undefined}
+        />
+        
+        {/* Outgate barrier arm */}
+        <motion.line
+          x1="475"
+          y1="268"
+          x2="492"
+          y2="261"
+          stroke="rgba(56,189,248,0.8)"
+          strokeWidth="3"
+          strokeLinecap="round"
+          animate={showActivity ? { rotate: [-5, 85, -5], x: [0, 4, 0] } : {}}
+          transition={showActivity ? { duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 2 } : {}}
+          style={{ transformOrigin: '475px 268px' }}
+        />
+      </g>
 
       {/* Parking/staging area markers */}
       {[0, 1, 2].map((i) => (

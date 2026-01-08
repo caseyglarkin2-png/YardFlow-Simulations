@@ -2,71 +2,239 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Smartphone, MapPin, CheckCircle2 } from 'lucide-react';
 import { IsometricYard } from './IsometricYard';
-import { AnimatedTruck } from './AnimatedTruck';
+import { YardJourneyTruck } from './TruckPathAnim';
+import { YARD_PATHS } from './YardPaths';
+
+// QR Scan effect overlay
+function QRScanEffect({ show, position }: { show: boolean; position: { x: number; y: number } }) {
+  if (!show) return null;
+  
+  return (
+    <g>
+      {/* QR code visual */}
+      <motion.rect
+        x={position.x - 15}
+        y={position.y - 15}
+        width="30"
+        height="30"
+        fill="rgba(56,189,248,0.2)"
+        stroke="rgba(56,189,248,0.8)"
+        strokeWidth="2"
+        rx="3"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.8, opacity: 0 }}
+      />
+      {/* QR pattern */}
+      {[...Array(3)].map((_, i) => (
+        <motion.line
+          key={i}
+          x1={position.x - 10}
+          y1={position.y - 8 + i * 8}
+          x2={position.x + 10}
+          y2={position.y - 8 + i * 8}
+          stroke="rgba(56,189,248,0.6)"
+          strokeWidth="2"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ delay: i * 0.1 }}
+        />
+      ))}
+      {/* Scan line */}
+      <motion.line
+        x1={position.x - 15}
+        y1={position.y}
+        x2={position.x + 15}
+        y2={position.y}
+        stroke="rgba(56,189,248,1)"
+        strokeWidth="3"
+        initial={{ y: position.y - 15 }}
+        animate={{ y: position.y + 15 }}
+        transition={{ duration: 0.8, repeat: 2 }}
+      />
+      {/* Success checkmark */}
+      <motion.g
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ delay: 1.5 }}
+      >
+        <circle
+          cx={position.x}
+          cy={position.y}
+          r="18"
+          fill="rgba(34,197,94,0.2)"
+          stroke="rgba(34,197,94,1)"
+          strokeWidth="2"
+        />
+        <motion.path
+          d={`M ${position.x - 8} ${position.y} L ${position.x - 3} ${position.y + 6} L ${position.x + 8} ${position.y - 6}`}
+          stroke="rgba(34,197,94,1)"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ delay: 1.6, duration: 0.3 }}
+        />
+      </motion.g>
+    </g>
+  );
+}
 
 function DriverScene({
   mode,
+  step,
 }: {
   mode: 'before' | 'after';
+  step: number; // 0-6: arrival, ingate, routing, dock, loading, outgate, exit
 }) {
-  // Define truck paths for before/after scenarios
-  const beforePath = [
-    { x: 80, y: 430, rotation: -15 },   // Approaching gate
-    { x: 120, y: 410, rotation: -15 },  // Stopped at gate (long wait)
-    { x: 130, y: 405, rotation: -15 },  // Slowly moving
-    { x: 180, y: 380, rotation: -20 },  // Confused routing
-    { x: 220, y: 360, rotation: -25 },  // Wrong turn
-    { x: 260, y: 340, rotation: -30 },  // Waiting at door
-    { x: 290, y: 320, rotation: -30 },  // Finally at door
-    { x: 320, y: 300, rotation: -30 },  // Loading (stuck)
-  ];
+  const [showQRScan, setShowQRScan] = useState(false);
+  const [showRouting, setShowRouting] = useState(false);
+  const [showOutgateProof, setShowOutgateProof] = useState(false);
 
-  const afterPath = [
-    { x: 80, y: 430, rotation: -15 },   // Approaching gate
-    { x: 160, y: 390, rotation: -15 },  // Quick through gate
-    { x: 240, y: 350, rotation: -25 },  // Direct routing
-    { x: 300, y: 315, rotation: -30 },  // At door quickly
-    { x: 320, y: 305, rotation: -30 },  // Loading
-    { x: 340, y: 295, rotation: -30 },  // Done
-    { x: 380, y: 275, rotation: -35 },  // Exiting
-    { x: 420, y: 255, rotation: -35 },  // Smooth exit
-  ];
+  // Trigger QR scan at ingate step in after mode
+  useEffect(() => {
+    if (mode === 'after' && step === 1) {
+      setShowQRScan(true);
+      const timer = setTimeout(() => {
+        setShowQRScan(false);
+        setShowRouting(true);
+      }, 2500);
+      return () => clearTimeout(timer);
+    } else {
+      setShowQRScan(false);
+    }
+  }, [mode, step]);
+
+  // Show routing in after mode
+  useEffect(() => {
+    if (mode === 'after' && step === 2) {
+      setShowRouting(true);
+    } else if (step > 3) {
+      setShowRouting(false);
+    }
+  }, [mode, step]);
+
+  // Show outgate proof in after mode
+  useEffect(() => {
+    if (mode === 'after' && step === 5) {
+      setShowOutgateProof(true);
+      const timer = setTimeout(() => setShowOutgateProof(false), 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [mode, step]);
 
   return (
     <div className="relative h-[500px] w-full">
       <IsometricYard showActivity={mode === 'after'} />
       
-      {/* Overlay SVG for truck animation */}
+      {/* Overlay SVG for truck animation and effects */}
       <svg
         viewBox="0 0 800 600"
         className="absolute inset-0 h-full w-full"
         style={{ pointerEvents: 'none' }}
       >
-        <AnimatedTruck
-          path={mode === 'before' ? beforePath : afterPath}
-          duration={mode === 'before' ? 16 : 10}
-          color={mode === 'before' ? 'rgba(244,63,94,0.8)' : 'rgba(56,189,248,0.9)'}
-        />
+        {/* Main truck journey */}
+        <YardJourneyTruck mode={mode} delay={0} />
         
-        {/* Additional trucks in "after" mode to show higher throughput */}
+        {/* Additional throughput trucks in after mode */}
         {mode === 'after' && (
           <>
-            <AnimatedTruck
-              path={afterPath}
-              duration={10}
-              delay={3}
-              color="rgba(56,189,248,0.7)"
-            />
-            <AnimatedTruck
-              path={afterPath}
-              duration={10}
-              delay={6}
-              color="rgba(56,189,248,0.6)"
-            />
+            <YardJourneyTruck mode={mode} delay={4} />
+            <YardJourneyTruck mode={mode} delay={8} />
           </>
         )}
+        
+        {/* QR scan visualization at ingate */}
+        <AnimatePresence>
+          {showQRScan && <QRScanEffect show={showQRScan} position={{ x: 131, y: 417 }} />}
+        </AnimatePresence>
+        
+        {/* Routing instruction callout */}
+        <AnimatePresence>
+          {showRouting && (
+            <motion.g
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+            >
+              <rect
+                x="200"
+                y="340"
+                width="140"
+                height="50"
+                rx="8"
+                fill="rgba(20,25,35,0.95)"
+                stroke="rgba(56,189,248,0.6)"
+                strokeWidth="2"
+              />
+              <text
+                x="270"
+                y="360"
+                textAnchor="middle"
+                fill="rgba(56,189,248,1)"
+                fontSize="11"
+                fontWeight="600"
+              >
+                ROUTE ASSIGNED
+              </text>
+              <text
+                x="270"
+                y="377"
+                textAnchor="middle"
+                fill="rgba(255,255,255,0.9)"
+                fontSize="14"
+                fontWeight="700"
+              >
+                Door 42 • Lane B
+              </text>
+            </motion.g>
+          )}
+        </AnimatePresence>
+        
+        {/* Outgate proof captured */}
+        <AnimatePresence>
+          {showOutgateProof && (
+            <motion.g
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+            >
+              <rect
+                x="420"
+                y="230"
+                width="120"
+                height="45"
+                rx="8"
+                fill="rgba(34,197,94,0.15)"
+                stroke="rgba(34,197,94,0.8)"
+                strokeWidth="2"
+              />
+              <text
+                x="480"
+                y="250"
+                textAnchor="middle"
+                fill="rgba(34,197,94,1)"
+                fontSize="11"
+                fontWeight="600"
+              >
+                PROOF CAPTURED
+              </text>
+              <text
+                x="480"
+                y="265"
+                textAnchor="middle"
+                fill="rgba(255,255,255,0.9)"
+                fontSize="10"
+              >
+                Auto-released
+              </text>
+            </motion.g>
+          )}
+        </AnimatePresence>
       </svg>
 
       {/* Status indicator */}
@@ -89,12 +257,49 @@ function DriverScene({
           </div>
         </motion.div>
       </div>
+      
+      {/* Mobile app indicator in after mode */}
+      {mode === 'after' && (
+        <div className="absolute top-6 right-6">
+          <motion.div
+            className="rounded-xl border border-cyan-400/30 bg-black/40 backdrop-blur-xl px-4 py-3"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+          >
+            <div className="flex items-center gap-2">
+              <Smartphone className="h-4 w-4 text-cyan-400" />
+              <div className="text-xs font-semibold text-white">YardFlow Mobile</div>
+            </div>
+            <div className="mt-1 text-xs text-white/60">QR Check-in Active</div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function DriverCheckInOutSim() {
   const [mode, setMode] = useState<'before' | 'after'>('before');
+  const [currentStep, setCurrentStep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const steps = [
+    { id: 0, label: 'Arrival', description: 'Approaching yard' },
+    { id: 1, label: 'Ingate', description: mode === 'before' ? 'Manual check-in' : 'QR scan check-in' },
+    { id: 2, label: 'Routing', description: mode === 'before' ? 'Finding way' : 'Auto-routed' },
+    { id: 3, label: 'At Dock', description: 'Door assignment' },
+    { id: 4, label: 'Loading', description: 'Cargo operations' },
+    { id: 5, label: 'Outgate', description: mode === 'before' ? 'Manual checkout' : 'Auto proof capture' },
+    { id: 6, label: 'Exit', description: 'Departing yard' },
+  ];
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    const interval = setInterval(() => {
+      setCurrentStep((prev) => (prev + 1) % steps.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [isPlaying, steps.length]);
 
   return (
     <div className="relative">
@@ -113,7 +318,7 @@ export default function DriverCheckInOutSim() {
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl overflow-hidden relative">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(56,189,248,0.08),transparent_60%)]" />
             <div className="relative">
-              <DriverScene mode={mode} />
+              <DriverScene mode={mode} step={currentStep} />
             </div>
           </div>
         </div>
