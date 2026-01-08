@@ -9,13 +9,14 @@ interface YardSceneProps {
   mode: SimMode;
   scenarioType: 'driver' | 'facility' | 'network';
   facilityCount?: number;
+  reducedMotion?: boolean;
 }
 
-export default function YardScene({ actors, mode, scenarioType, facilityCount = 1 }: YardSceneProps) {
+export default function YardScene({ actors, mode, scenarioType, facilityCount = 1, reducedMotion = false }: YardSceneProps) {
   const actorsList = useMemo(() => Array.from(actors.values()), [actors]);
 
   if (scenarioType === 'network') {
-    return <NetworkScene mode={mode} facilityCount={facilityCount} />;
+    return <NetworkScene mode={mode} facilityCount={facilityCount} reducedMotion={reducedMotion} />;
   }
 
   return (
@@ -64,14 +65,39 @@ export default function YardScene({ actors, mode, scenarioType, facilityCount = 
         {/* QR Scanner (After mode only) */}
         {mode === 'after' && (
           <g>
-            <rect x="160" y="405" width="20" height="30" fill="rgba(56,189,248,0.2)" stroke="rgba(56,189,248,0.5)" strokeWidth="1" />
+            {/* Scanner kiosk */}
+            <rect x="160" y="405" width="20" height="30" fill="rgba(56,189,248,0.2)" stroke="rgba(56,189,248,0.5)" strokeWidth="1.5" rx="2" />
+            {/* Scanner screen with pulse */}
+            <motion.rect
+              x="163"
+              y="410"
+              width="14"
+              height="20"
+              fill="#0a0f1a"
+              stroke="#22d3ee"
+              strokeWidth="1"
+              rx="1"
+            />
+            {/* Scanning beam */}
+            <motion.line
+              x1="165"
+              x2="175"
+              y1="415"
+              y2="415"
+              stroke="#22d3ee"
+              strokeWidth="1"
+              initial={{ y1: 415, y2: 415 }}
+              animate={reducedMotion ? {} : { y1: [415, 425, 415], y2: [415, 425, 415] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            />
+            {/* Status indicator */}
             <motion.circle
               cx="170"
               cy="420"
-              r="3"
+              r="2"
               fill="#22d3ee"
               initial={{ opacity: 0.5 }}
-              animate={{ opacity: [0.5, 1, 0.5] }}
+              animate={reducedMotion ? { opacity: 1 } : { opacity: [0.5, 1, 0.5] }}
               transition={{ duration: 2, repeat: Infinity }}
             />
           </g>
@@ -111,15 +137,28 @@ export default function YardScene({ actors, mode, scenarioType, facilityCount = 
               
               {/* Door status indicator */}
               {scenarioType === 'facility' && (
-                <motion.circle
-                  cx="360"
-                  cy={275 + i * 40}
-                  r="3"
-                  fill={mode === 'after' ? '#22d3ee' : '#94a3b8'}
-                  initial={{ opacity: 0.5 }}
-                  animate={{ opacity: [0.5, 1, 0.5] }}
-                  transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.3 }}
-                />
+                <g>
+                  <motion.circle
+                    cx="360"
+                    cy={275 + i * 40}
+                    r="4"
+                    fill={mode === 'after' ? '#22d3ee' : '#94a3b8'}
+                    initial={{ opacity: 0.5 }}
+                    animate={reducedMotion ? { opacity: 0.8 } : { opacity: [0.5, 1, 0.5] }}
+                    transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.3 }}
+                  />
+                  {/* Door number label */}
+                  <text
+                    x="360"
+                    y={278 + i * 40}
+                    fontSize="8"
+                    fill="white"
+                    textAnchor="middle"
+                    opacity="0.6"
+                  >
+                    {i + 1}
+                  </text>
+                </g>
               )}
             </g>
           ))}
@@ -207,49 +246,92 @@ function Truck({ actor, mode }: { actor: Actor; mode: SimMode }) {
       animate={{ x: actor.x, y: actor.y, rotate: actor.rotation || 0 }}
       transition={{ duration: 0.5, ease: 'easeInOut' }}
     >
-      {/* Truck body */}
+      {/* Trailer */}
       <rect
         x={-15}
         y={-8}
-        width="30"
+        width="28"
         height="16"
-        fill={`${color}33`}
+        fill={`${color}22`}
         stroke={color}
         strokeWidth="2"
         rx="2"
       />
+      {/* Trailer details */}
+      <line x1="-10" y1="-8" x2="-10" y2="8" stroke={color} strokeWidth="0.5" opacity="0.4" />
+      <line x1="0" y1="-8" x2="0" y2="8" stroke={color} strokeWidth="0.5" opacity="0.4" />
+      
       {/* Truck cab */}
       <rect
         x={-15}
         y={-6}
-        width="8"
+        width="10"
         height="12"
         fill={color}
-        opacity="0.8"
+        opacity="0.9"
+        rx="1"
+      />
+      {/* Cab window */}
+      <rect
+        x={-13}
+        y={-4}
+        width="6"
+        height="4"
+        fill="rgba(255,255,255,0.3)"
       />
       
-      {/* Status indicator */}
+      {/* Wheels */}
+      <circle cx="-8" cy="8" r="2" fill="#1e293b" stroke={color} strokeWidth="1" />
+      <circle cx="8" cy="8" r="2" fill="#1e293b" stroke={color} strokeWidth="1" />
+      
+      {/* Status indicator badges */}
       {actor.status === 'qr_scan' && (
-        <motion.circle
-          cx="0"
-          cy="-15"
-          r="4"
-          fill="#22d3ee"
-          initial={{ scale: 0 }}
-          animate={{ scale: [0, 1.2, 1] }}
-          transition={{ duration: 0.3 }}
-        />
+        <g>
+          <motion.circle
+            cx="0"
+            cy="-18"
+            r="6"
+            fill="#22d3ee"
+            initial={{ scale: 0 }}
+            animate={{ scale: [0, 1.3, 1] }}
+            transition={{ duration: 0.4 }}
+          />
+          {/* QR icon */}
+          <motion.rect
+            x="-3"
+            y="-21"
+            width="6"
+            height="6"
+            fill="white"
+            rx="0.5"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          />
+        </g>
       )}
       {actor.status === 'wrong_turn' && (
-        <motion.circle
-          cx="0"
-          cy="-15"
-          r="4"
-          fill="#ef4444"
+        <motion.g
           initial={{ scale: 0 }}
           animate={{ scale: [0, 1.2, 1] }}
           transition={{ duration: 0.3 }}
-        />
+        >
+          <circle cx="0" cy="-18" r="6" fill="#ef4444" />
+          {/* X mark */}
+          <line x1="-3" y1="-21" x2="3" y2="-15" stroke="white" strokeWidth="2" />
+          <line x1="3" y1="-21" x2="-3" y2="-15" stroke="white" strokeWidth="2" />
+        </motion.g>
+      )}
+      {actor.status === 'verified' && (
+        <motion.g
+          initial={{ scale: 0 }}
+          animate={{ scale: [0, 1.2, 1] }}
+          transition={{ duration: 0.3 }}
+        >
+          <circle cx="0" cy="-18" r="6" fill="#22d3ee" />
+          {/* Check mark */}
+          <path d="M -2 -18 L 0 -16 L 3 -21" stroke="white" strokeWidth="2" fill="none" />
+        </motion.g>
       )}
     </motion.g>
   );
@@ -262,20 +344,39 @@ function Spotter({ actor, mode }: { actor: Actor; mode: SimMode }) {
       animate={{ x: actor.x, y: actor.y }}
       transition={{ duration: 1, ease: 'linear' }}
     >
-      {/* Spotter vehicle - small tug */}
-      <circle
-        cx="0"
-        cy="0"
-        r="6"
-        fill={mode === 'after' ? 'rgba(56,189,248,0.4)' : 'rgba(148,163,184,0.4)'}
+      {/* Spotter vehicle body - small tug */}
+      <rect
+        x="-8"
+        y="-5"
+        width="16"
+        height="10"
+        fill={mode === 'after' ? 'rgba(56,189,248,0.3)' : 'rgba(148,163,184,0.3)'}
         stroke={mode === 'after' ? '#22d3ee' : '#94a3b8'}
         strokeWidth="2"
+        rx="2"
+      />
+      {/* Cab */}
+      <rect
+        x="-8"
+        y="-3"
+        width="6"
+        height="6"
+        fill={mode === 'after' ? '#22d3ee' : '#94a3b8'}
+        opacity="0.8"
+      />
+      {/* Motion indicator */}
+      <motion.circle
+        cx="0"
+        cy="0"
+        r="3"
+        fill={mode === 'after' ? '#22d3ee' : '#94a3b8'}
+        opacity="0.6"
       />
     </motion.g>
   );
 }
 
-function NetworkScene({ mode, facilityCount }: { mode: SimMode; facilityCount: number }) {
+function NetworkScene({ mode, facilityCount, reducedMotion }: { mode: SimMode; facilityCount: number; reducedMotion?: boolean }) {
   const gridSize = 6;
   const cellSize = 80;
   const offsetX = 100;
@@ -351,7 +452,7 @@ function NetworkScene({ mode, facilityCount }: { mode: SimMode; facilityCount: n
                 r="4"
                 fill="#22d3ee"
                 initial={{ opacity: 0.8 }}
-                animate={{ opacity: [0.8, 0.3, 0.8] }}
+                animate={reducedMotion ? { opacity: 0.8 } : { opacity: [0.8, 0.3, 0.8] }}
                 transition={{ duration: 2, repeat: Infinity, delay: i * 0.1 }}
               />
             )}

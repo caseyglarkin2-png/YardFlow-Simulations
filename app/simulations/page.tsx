@@ -35,12 +35,12 @@ export default function SimulationsPage() {
       <div className="relative">
         {/* Hero Section */}
         <div className="border-b border-white/10 bg-black/30 backdrop-blur-xl">
-          <div className="container mx-auto px-6 py-12">
+          <div className="container mx-auto px-4 sm:px-6 py-8 sm:py-12">
             <div className="max-w-4xl">
-              <h1 className="text-5xl font-bold tracking-tight text-white mb-4">
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white mb-3 sm:mb-4">
                 YardFlow Simulations
               </h1>
-              <p className="text-xl text-white/70 leading-relaxed">
+              <p className="text-base sm:text-lg lg:text-xl text-white/70 leading-relaxed">
                 Deterministic simulations showing the operational mechanics of YardFlow YNS.
                 Watch workflows transform from manual friction to digital orchestration.
               </p>
@@ -48,10 +48,10 @@ export default function SimulationsPage() {
           </div>
         </div>
 
-        {/* Tab Navigation */}
+        {/* Tab Navigation - Sticky on mobile */}
         <div className="border-b border-white/10 bg-black/20 backdrop-blur-xl sticky top-0 z-10">
-          <div className="container mx-auto px-6">
-            <div className="flex gap-2">
+          <div className="container mx-auto px-4 sm:px-6">
+            <div className="flex gap-1 sm:gap-2 overflow-x-auto scrollbar-hide">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -60,13 +60,14 @@ export default function SimulationsPage() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className="relative px-6 py-4 text-sm font-semibold uppercase tracking-wider transition-colors"
+                    className="relative px-4 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-semibold uppercase tracking-wider transition-colors whitespace-nowrap flex-shrink-0"
                   >
-                    <div className={`flex items-center gap-2 ${
+                    <div className={`flex items-center gap-1.5 sm:gap-2 ${
                       isActive ? 'text-cyan-400' : 'text-white/50 hover:text-white/70'
                     }`}>
-                      <Icon className="h-4 w-4" />
-                      {tab.label}
+                      <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      <span className="hidden sm:inline">{tab.label}</span>
+                      <span className="sm:hidden">{tab.label.split(' ')[0]}</span>
                     </div>
                     
                     {isActive && (
@@ -84,7 +85,7 @@ export default function SimulationsPage() {
         </div>
 
         {/* Simulation Content */}
-        <div className="container mx-auto px-6 py-12">
+        <div className="container mx-auto px-4 sm:px-6 py-8 sm:py-12">
           <motion.div
             key={activeTab}
             initial={{ opacity: 0, y: 20 }}
@@ -97,9 +98,9 @@ export default function SimulationsPage() {
         </div>
 
         {/* Footer Note */}
-        <div className="container mx-auto px-6 py-12">
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] backdrop-blur-xl p-6">
-            <div className="text-sm text-white/60 leading-relaxed">
+        <div className="container mx-auto px-4 sm:px-6 py-8 sm:py-12">
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] backdrop-blur-xl p-4 sm:p-6">
+            <div className="text-xs sm:text-sm text-white/60 leading-relaxed">
               <strong className="text-white/80">About these simulations:</strong> Each scenario is a deterministic
               state machine driven by timestamped events. Metrics are computed from the event stream, not randomized.
               The "Before" scenarios model manual workflows with friction (paperwork, phone calls, delays). The "After"
